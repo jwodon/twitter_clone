@@ -1,0 +1,2 @@
+1. wrapped seed file in app.context
+2. missing DictReader function in seed.py
