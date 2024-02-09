@@ -1,11 +1,11 @@
 import os
 
-from flask import Flask, render_template, request, flash, redirect, session, g
+from flask import Flask, render_template, request, flash, redirect, session, g, jsonify
 from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm, UserEditForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -263,6 +263,60 @@ def delete_user():
 
     return redirect("/signup")
 
+@app.route('/users/add_like/<int:msg_id>', methods=['POST'])
+def add_like(msg_id):
+    """Add like to a message"""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+    
+    message = Message.query.get_or_404(msg_id)
+
+    # Check if the current user has already liked the message
+    already_liked = Likes.query.filter_by(user_id=g.user.id, message_id=msg_id).first()
+
+    if already_liked:
+        # Remove the like
+        db.session.delete(already_liked)
+    else:
+        # Add the like
+        new_like = Likes(user_id=g.user.id, message_id=msg_id)
+        db.session.add(new_like)
+
+    db.session.commit()
+
+    return redirect(request.referrer or "/")
+
+
+@app.route('/users/<int:user_id>/likes')
+def show_likes(user_id):
+    """Show list of messages this user liked."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = User.query.get_or_404(user_id)
+    likes = g.user.likes
+    return render_template('users/likes.html', user=user, likes=likes)
+
+@app.route('/messages/all')
+def show_all_messages():
+    """Show a page with all messages."""
+
+    messages = Message.query.order_by(Message.timestamp.desc()).limit(100).all()
+
+    # Retrieve likes for the current user
+    likes = {}
+    if g.user:
+        likes = {message.id: [like.id for like in message.likes] for message in messages if message.likes}
+
+    return render_template('messages/all.html', messages=messages, likes=likes)
+
+
+
+
 
 ##############################################################################
 # Messages routes:
@@ -331,7 +385,9 @@ def homepage():
         # Retrieve the last 100 warbles from the users that the logged-in user is following
         messages = Message.query.filter(Message.user_id.in_(following_ids)).order_by(Message.timestamp.desc()).limit(100).all()
 
-        return render_template('home.html', messages=messages)
+        likes = {message.id: [like.id for like in message.likes] for message in messages}
+
+        return render_template('home.html', messages=messages, likes=likes)
 
     else:
         return render_template('home-anon.html')

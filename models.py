@@ -112,7 +112,8 @@ class User(db.Model):
 
     likes = db.relationship(
         'Message',
-        secondary="likes"
+        secondary="likes",
+        backref='liked_messages'
     )
 
     def __repr__(self):
@@ -198,6 +199,8 @@ class Message(db.Model):
     )
 
     user = db.relationship('User')
+
+    likes = db.relationship('User', secondary="likes", backref='liked_messages')
 
 
 def connect_db(app):
